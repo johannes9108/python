@@ -5,7 +5,7 @@ from sympy import Symbol, nsolve
 
 from scipy.optimize import *
 from trilateration2D import point,circle
-
+import re
 
 ser = serial.Serial()
 
@@ -20,22 +20,22 @@ run = True
 lengthInCM = 400 # Each side in CM
 step = 41.0 # Defines the available steps accesible from the Microbit. -44 to -128 is the default
 divisor = lengthInCM / step # Defines the cm per unit
-players = 2 # Number of players available to tracking
+noOfPlayers = 2 # Number of players available to tracking
+playerMeasurement = []
 player_list = [] # player
 
+
 def playerList(player_list):
-    for x in range(players):
+    for x in range(noOfPlayers):
         p = x+1
         player = 'P' + str(p)
         player_list.append(player)
+        playerMeasurement.append([-1,-1])
 playerList(player_list) #
 
 
 A = [[0, 0],[lengthInCM, 0],[lengthInCM, lengthInCM],[0, lengthInCM]] # Defines coordinates of the Antennas
-player_antenna_lists = [[[]for y in range(4)]for x in range(players)] # 3Dimensional list containing Recorded RSSI values for each Player-Antenna
-
-print player_antenna_lists
-
+player_antenna_lists = [[[]for y in range(4)]for x in range(noOfPlayers)] # 3Dimensional list containing Recorded RSSI values for each Player-Antenna
 
 test = "A1,RSSI:-80,MSG:P1"
 
@@ -56,8 +56,8 @@ y = Symbol('y')
 # print z
 
 def checkDistanceArrays(): #Checking if there are at least 3 recorded distances
-    checkList = [[]for x in range(players)]
-    flags = [False for x in range(players)]
+    checkList = [[]for x in range(noOfPlayers)]
+    flags = [False for x in range(noOfPlayers)]
     for i in range(player_list.__len__()):
         if player_antenna_lists[i][0] != []:
             checkList[i].append(0)
@@ -67,6 +67,7 @@ def checkDistanceArrays(): #Checking if there are at least 3 recorded distances
             checkList[i].append(2)
         if player_antenna_lists[i][3] != []:
             checkList[i].append(3)
+
         if checkList[i].__len__() >= 3:
             flags[i] = True
 
@@ -77,10 +78,11 @@ def trilaterate(distances,antennas):
     anchors = [0,0,0,0]
 
     for x in range(3):
-         anchors[antennas[x]] = A[antennas[x]]
-    anchors.remove(0)
+        anchors[antennas[x]] = A[antennas[x]]
+    anchors.remove(0)   # Deletes the remaining antenna
 
-    print "\n", anchors, "\nDistances: ", distances
+
+
 
    # points = [trilateration2D.point(anchors[0][0],anchors[0][1]),trilateration2D.point(anchors[1][0], anchors[1][1]),trilateration2D.point()]
    #print points[0].x
@@ -125,37 +127,38 @@ def trilaterate(distances,antennas):
             inner_points.append(p)
     if inner_points != []:
         center = trilateration2D.get_polygon_center(inner_points)
-        print center.x, center.y
         return center
-    else:
-        for i in range(points.__len__()):
-            print points[i].x, points[i].y, "\n"
-        return None
-
-
-    #F[0] = (x - anchors[0][0]) ** 2 + (y - anchors[0][1]) ** 2 - length**2
-
-
-
-
-    #circles = [[p1],[],[]]
-    #print nsolve([((x-p1[0])**2 + (y-p1[1])**2) - d1**2, ((x-p2[0])**2 + (y-p2[1])**2) - d2**2 ], [x, y], [1, 1])
-    # e1 = math.pow(,2)+math.pow
-    # e2 = math.pow(x - p2[0], 2) + math.pow(y - p2[1], 2)
-    # e3 = math.pow(x - p3[0], 2) + math.pow(y - p3[1], 2)
+    # else:
+    #     for i in range(points.__len__()):
+    #         print points[i].x, points[i].y, "\n"
+    #     return None
+   #
+   #
+   #  #F[0] = (x - anchors[0][0]) ** 2 + (y - anchors[0][1]) ** 2 - length**2
+   #
+   #
+   #
+   #
+   #  #circles = [[p1],[],[]]
+   #  #print nsolve([((x-p1[0])**2 + (y-p1[1])**2) - d1**2, ((x-p2[0])**2 + (y-p2[1])**2) - d2**2 ], [x, y], [1, 1])
+   #  # e1 = math.pow(,2)+math.pow
+   #  # e2 = math.pow(x - p2[0], 2) + math.pow(y - p2[1], 2)
+   #  # e3 = math.pow(x - p3[0], 2) + math.pow(y - p3[1], 2)
 
 def translateDistToCoord():
     result = checkDistanceArrays()
     flags = result[0]
     checklist = result[1]
 
-    for i in range(players):
+    for i in range(noOfPlayers):
         if flags[i] == True:
-            d = [player_antenna_lists[i][checklist[i][0]],player_antenna_lists[i][checklist[i][1]],player_antenna_lists[i][checklist[i][2]]]
-            del player_antenna_lists[i][0],player_antenna_lists[i][0],player_antenna_lists[i][0]
-    print player_antenna_lists
-        #     return trilaterate(d, result)
-        # return None
+            d = [player_antenna_lists[i][checklist[i][0]][0],player_antenna_lists[i][checklist[i][1]][0],player_antenna_lists[i][checklist[i][2]][0]]
+            center = trilaterate(d, checklist[i])
+            if center != None:
+                playerMeasurement[i] = [center.x,center.y]
+            del player_antenna_lists[i][checklist[i][0]][0],player_antenna_lists[i][checklist[i][1]][0],player_antenna_lists[i][checklist[i][2]][0]
+
+
 
     #a[result[0]][0],a[result[1]][0],a[result[2]][0]
 
@@ -163,7 +166,7 @@ def translateDistToCoord():
 def convertSignalToCM(signal):
     rssi = math.fabs(signal) - 44
     result = rssi * divisor
-    return result
+    return round(result,2)
 
 
 def extractRSSI(rssi):
@@ -172,7 +175,14 @@ def extractRSSI(rssi):
 def extractPlayer(player):
     player = str(player).split(':')
     return player[1]
-
+def checkSerialData(text):
+    text = str(text)
+    pattern = re.compile("A\d,RSSI:-\d\d,MSG:P\d")
+    result = re.match(pattern, text)
+    if result is not None:
+        return [True,text]
+    else:
+        return [False]
 def parse(text):
     text = str(text).split(',')
     tmp = convertSignalToCM(extractRSSI(text[1]))
@@ -191,32 +201,36 @@ def parse(text):
                 player_antenna_lists[pCount][3].append(tmp)
         pCount +=1
 
+
+
+
+direction = [[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]
+
 weights = []
 particle_set = []
 
 ser.open()
 while run:
     s = ser.read(18)
-    text = str(s)
-    if text.__len__()>3:
-        print text
-        parse(text)
-    time.sleep(0.4)
+    result = checkSerialData(s)
+    if result[0] is True:
+        parse(result[1])
+    time.sleep(0.2)
     translateDistToCoord()
-ser.close()
 
-def particle_filter():
+    particle_filter(playerMeasurement)
+    # for i in range(noOfPlayers):
+    #     print "P", i + 1, ": X=", playerMeasurement[i][0], ", Y=", playerMeasurement[i][1]
+ser.close()
+test = "A1,RSSI:-80,MSG:P1"
+
+
+def particle_filter(measurements):
     N = 250
     local_particle_set = [[random.randint(0,lengthInCM),random.randint(0,lengthInCM)]for x in range(N)]
-    Z = [30,235]
+    Z = measurements
     print local_particle_set
     calculateWeights(local_particle_set,Z)
-
-
-
-
-
-
 
 def calculateWeights(set,Z):
     for i in set:
